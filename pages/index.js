@@ -23,24 +23,31 @@ export default function App() {
 function Example() {
   const queryClient = useQueryClient();
   const [text, setText] = React.useState("");
+  const [cmtText, setCmtText] = React.useState("");
+  const [userId, setUserId] = React.useState(1);
 
-  const { status, data, error, isFetching } = useQuery("todos", async () => {
-    const res = await axios.get("/api/data");
+  const { status, data, error, isFetching } = useQuery("users", async () => {
+    const res = await axios.get("/api/user");
+    return res.data;
+  });
+  const usrCmtQuery = useQuery(["users",userId], async () => {
+    const res = await axios.get(`/api/user/comment/${userId}`);
     return res.data;
   });
 
-  const mutationFn = (text) => axios.post("/api/data", { text });
-  const addTodoMutation = useMutation(mutationFn, {
+  const mutationFn = (text) => axios.post("/api/user", { text });
+  const mutationByIdFn = (text) => axios.post(`/api/user/comment/${userId}`, { text });
+  const addUserMutation = useMutation(mutationFn, {
     // Optimistically update the cache value on mutate, but store
     // the old value and return it so that it's accessible in case of
     // an error
     onMutate: async (text) => {
       setText("");
-      await queryClient.cancelQueries("todos");
+      await queryClient.cancelQueries("users");
 
-      const previousValue = queryClient.getQueryData("todos");
+      const previousValue = queryClient.getQueryData("users");
 
-      queryClient.setQueryData("todos", (old) => ({
+      queryClient.setQueryData("users", (old) => ({
         ...old,
         items: [...old.items, text]
       }));
@@ -49,27 +56,45 @@ function Example() {
     },
     // On failure, roll back to the previous value
     onError: (err, variables, previousValue) =>
-      queryClient.setQueryData("todos", previousValue),
-    // After success or failure, refetch the todos query
+      queryClient.setQueryData("users", previousValue),
+    // After success or failure, refetch the users query
     onSettled: () => {
-      queryClient.invalidateQueries("todos");
+      queryClient.invalidateQueries("users");
+    }
+  });
+  const addUserCommentMutation = useMutation(mutationByIdFn, {
+    // Optimistically update the cache value on mutate, but store
+    // the old value and return it so that it's accessible in case of
+    // an error
+    onMutate: async (text) => {
+      setCmtText("");
+      await queryClient.cancelQueries(["users", userId]);
+      const previousValue = queryClient.getQueryData(["users", userId]);
+      queryClient.setQueryData(["users",userId], (old) => ({
+        ...old,
+        comments: [...old.comments, text]
+      }));
+
+      return previousValue;
+    },
+    // On failure, roll back to the previous value
+    onError: (err, variables, previousValue) =>
+      queryClient.setQueryData(["users",userId], previousValue),
+    // After success or failure, rfetch the users query
+    onSettled: () => {
+      queryClient.invalidateQueries(["users",userId]);
     }
   });
 
   return (
     <div>
       <p>
-        In this example, new items can be created using a mutation. The new item
-        will be optimistically added to the list in hopes that the server
-        accepts the item. If it does, the list is refetched with the true items
-        from the list. Every now and then, the mutation may fail though. When
-        that happens, the previous list of items is restored and the list is
-        again refetched from the server.
+        Add Users
       </p>
       <form
         onSubmit={(e) => {
           e.preventDefault();
-          addTodoMutation.mutate(text);
+          addUserMutation.mutate(text);
         }}
       >
         <input
@@ -77,22 +102,54 @@ function Example() {
           onChange={(event) => setText(event.target.value)}
           value={text}
         />
-        <button>{addTodoMutation.isLoading ? "Creating..." : "Create"}</button>
+        <button>{addUserMutation.isLoading ? "Creating..." : "Create"}</button>
       </form>
-      <br />
       {status === "loading" ? (
         "Loading..."
       ) : status === "error" ? (
         error.message
       ) : (
         <>
-          <div>Updated At: {new Date(data.ts).toLocaleTimeString()}</div>
           <ul>
-            {data.items.map((datum) => (
+            {data && data.items?.map((datum) => (
               <li key={datum}>{datum}</li>
             ))}
           </ul>
-          <div>{isFetching ? "Updating in background..." : " "}</div>
+          <div>{usrCmtQuery.isFetching ? "Updating in background..." : " "}</div>
+        </>
+      )}
+
+      <br/><br/><br/><br/>
+      <div>{userId}번 포스트 코멘트</div>
+      <button onClick={() => setUserId(id => id - 1 > 0 ? id-1: id)}>before User</button>
+      <button onClick={() => setUserId(id => id + 1 < 10 ? id+1:id)}>next User</button>
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          addUserCommentMutation.mutate(cmtText);
+        }}
+      >
+        <input
+          type="text"
+          onChange={(event) => setCmtText(event.target.value)}
+          value={cmtText}
+        />
+        <button>{addUserCommentMutation.isLoading ? "Creating..." : "Create"}</button>
+      </form>
+      <br />
+      
+      {usrCmtQuery.status === "loading" ? (
+        "Loading..."
+      ) : usrCmtQuery.status === "error" ? (
+        usrCmtQuery.error.message
+      ) : (
+        <>
+          <ul>
+            {usrCmtQuery.data && usrCmtQuery.data.comments?.map((datum) => (
+              <li key={datum}>{datum}</li>
+            ))}
+          </ul>
+          <div>{usrCmtQuery.isFetching ? "Updating in background..." : " "}</div>
         </>
       )}
       <ReactQueryDevtools initialIsOpen />
